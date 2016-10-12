@@ -15,8 +15,6 @@ plugins {
 
 
 apply plugin: 'com.android.library'
-apply plugin: 'com.github.dcendents.android-maven'
-
 if (new File("./gradle/localrepo.gradle").exists()) {
     apply from: "./gradle/localrepo.gradle"
 }

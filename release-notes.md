@@ -1,3 +1,19 @@
+## v1.9
+
+* further enhancements for multithreaded operation
+
+## v1.8
+
+* try to improve multithreaded operation
+* reduce warning log output if used together with BASIC auth
+
+## v1.7
+
+* use okhttp logging rather than slf4j to prevent log warnings when 
+  no slf4j implementation is available
+* removed not needed manifest entries
+* Fixed invalid authentication caching with multiple servers on the same host 
+  
 ## v1.6
  
 * use slf4j rather than android logging

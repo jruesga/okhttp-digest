@@ -18,13 +18,13 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Formatter;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.concurrent.ConcurrentHashMap;
 
 import okhttp3.Headers;
 import okhttp3.Request;
@@ -61,7 +61,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
             'e', 'f'
     };
 
-    Map<String, String> parameters = new HashMap<>();
+    Map<String, String> parameters = new ConcurrentHashMap<>();
     private Charset credentialsCharset = Charset.forName("ASCII");
     private final Credentials credentials;
     private String lastNonce;
@@ -81,8 +81,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
             return MessageDigest.getInstance(digAlg);
         } catch (final Exception e) {
             throw new IllegalArgumentException(
-                    "Unsupported algorithm in HTTP Digest authentication: "
-                            + digAlg);
+                    "Unsupported algorithm in HTTP Digest authentication: " + digAlg, e);
         }
     }
 
@@ -139,11 +138,16 @@ public class DigestAuthenticator implements CachingAuthenticator {
     }
 
     @Override
-    public Request authenticate(Route route, Response response) throws IOException {
+    public synchronized Request authenticate(Route route, Response response) throws IOException {
         String header = findDigestHeader(response.headers());
         parseChallenge(header, 7, header.length() - 7, parameters);
         // first copy all request headers to our params array
         copyHeaderMap(response.headers(), parameters);
+
+        // sanity check for issue #22
+        if (parameters.get("nonce") == null) {
+            throw new IllegalArgumentException("missing nonce in challenge header: " + header);
+        }
 
         return authenticateWithState(response.request());
     }
@@ -162,7 +166,8 @@ public class DigestAuthenticator implements CachingAuthenticator {
     public Request authenticateWithState(Request request) throws IOException {
         final String realm = parameters.get("realm");
         if (realm == null) {
-            Platform.get().log(Platform.WARN, "missing realm in challenge", null);
+            // missing realm, this would mean that the authenticator is not initialized for this
+            // request. (e.g. if you configured the DispatchingAuthenticator.
             return null;
         }
         final String nonce = getParameter("nonce");
@@ -230,7 +235,8 @@ public class DigestAuthenticator implements CachingAuthenticator {
      * @param credentials User credentials
      * @return The digest-response as String.
      */
-    private NameValuePair createDigestHeader(
+//    @edu.umd.cs.findbugs.annotations.SuppressFBWarnings("LSC_LITERAL_STRING_COMPARISON")
+    private synchronized NameValuePair createDigestHeader(
             final Credentials credentials,
             final Request request) throws AuthenticationException {
         final String uri = getParameter("uri");
@@ -272,7 +278,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
         }
 
         String digAlg = algorithm;
-        if (digAlg.equalsIgnoreCase("MD5-sess")) {
+        if ("MD5-sess".equalsIgnoreCase(digAlg)) {
             digAlg = "MD5";
         }
 
@@ -280,7 +286,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
         try {
             digester = createMessageDigest(digAlg);
         } catch (final UnsupportedDigestAlgorithmException ex) {
-            throw new AuthenticationException("Unsuppported digest algorithm: " + digAlg);
+            throw new AuthenticationException("Unsuppported digest algorithm: " + digAlg, ex);
         }
 
         final String uname = credentials.getUserName();
@@ -306,7 +312,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
         a1 = null;
         a2 = null;
         // 3.2.2.2: Calculating digest
-        if (algorithm.equalsIgnoreCase("MD5-sess")) {
+        if ("MD5-sess".equalsIgnoreCase(algorithm)) {
             // H( unq(username-value) ":" unq(realm-value) ":" passwd )
             //      ":" unq(nonce-value)
             //      ":" unq(cnonce-value)
@@ -455,8 +461,8 @@ public class DigestAuthenticator implements CachingAuthenticator {
         } else {
             try {
                 return data.getBytes("US-ASCII");
-            } catch (UnsupportedEncodingException var2) {
-                throw new Error("HttpClient requires ASCII support");
+            } catch (UnsupportedEncodingException e) {
+                throw new Error("HttpClient requires ASCII support", e);
             }
         }
     }
@@ -469,7 +475,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
         this.proxy = proxy;
     }
 
-    private class AuthenticationException extends IllegalStateException {
+    private static class AuthenticationException extends IllegalStateException {
         public AuthenticationException(String s) {
             super(s);
         }

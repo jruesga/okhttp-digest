@@ -4,30 +4,14 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:2.2.1'
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
     }
 }
 
-plugins {
-    id "com.jfrog.bintray" version "1.3.1"
-}
-
-
 apply plugin: 'com.android.library'
-if (new File("./gradle/localrepo.gradle").exists()) {
-    apply from: "./gradle/localrepo.gradle"
-}
-
-group = "com.burgstaller"
-archivesBaseName = 'okhttp-digest'
 
 repositories {
     mavenLocal()
     jcenter()
-    maven {
-        url "https://oss.sonatype.org/content/repositories/snapshots"
-    }
 }
 
 android {
@@ -58,71 +42,4 @@ dependencies {
     compile 'com.squareup.okhttp3:okhttp:3.4.1'
     testCompile 'org.hamcrest:hamcrest-junit:2.0.0.0'
     testCompile 'junit:junit:4.12'
-}
-
-def siteUrl = 'https://github.com/rburgst/okhttp-digest'
-def gitUrl = 'https://github.com/rburgst/okhttp-digest.git'
-
-if (!hasProperty('bintray_user')) {
-    project.ext {
-        bintray_user = "undef"
-        bintray_api_key = "undef"
-    }
-}
-
-bintray {
-    user = property('bintray_user')
-    key = property('bintray_api_key')
-
-    configurations = ['archives'] //When uploading configuration files
-    pkg {
-        repo = 'android'
-        name = project.name
-        desc = 'digest authenticator for okhttp'
-        websiteUrl = siteUrl
-        issueTrackerUrl = 'https://github.com/rburgst/okhttp-digest/issues'
-        vcsUrl = gitUrl
-        licenses = ['Apache-2.0']
-        labels = ['aar', 'android', 'okhttp']
-        publicDownloadNumbers = true
-    }
-}
-
-android.libraryVariants.all  { variant ->
-    def name = variant.buildType.name
-    if (!name.equals("debug")) {
-        def task = project.tasks.create  "jar${name.capitalize()}", Jar
-        task.dependsOn variant.javaCompile
-        task.from  variant.javaCompile.destinationDir
-        artifacts.add('archives', task);
-    }
-}
-
-task sourcesJar(type: Jar) {
-    from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
-}
-
-task javadoc(type: Javadoc) {
-    source = android.sourceSets.main.java.srcDirs
-    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-    classpath += configurations.compile
-}
-
-task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
-    from javadoc.destinationDir
-}
-
-artifacts {
-    archives javadocJar
-    archives sourcesJar
-}
-
-task findConventions << {
-    println project.getConvention()
-}
-
-task wrapper(type: Wrapper) {
-    gradleVersion = '2.14.1'
 }

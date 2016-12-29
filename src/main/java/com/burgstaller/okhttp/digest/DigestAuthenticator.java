@@ -118,7 +118,6 @@ public class DigestAuthenticator implements CachingAuthenticator {
         return new String(buffer);
     }
 
-
     protected void parseChallenge(
             final String buffer, int pos, int len, Map<String, String> params) {
 
@@ -139,7 +138,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
 
     @Override
     public synchronized Request authenticate(Route route, Response response) throws IOException {
-        String header = findDigestHeader(response.headers());
+        String header = findDigestHeader(response.headers(), getHeaderName(response.code()));
         parseChallenge(header, 7, header.length() - 7, parameters);
         // first copy all request headers to our params array
         copyHeaderMap(response.headers(), parameters);
@@ -152,8 +151,20 @@ public class DigestAuthenticator implements CachingAuthenticator {
         return authenticateWithState(response.request());
     }
 
-    private String findDigestHeader(Headers headers) {
-        final List<String> authHeaders = headers.values("WWW-Authenticate");
+    private String getHeaderName(int httpStatus) {
+        if (httpStatus == 401) {
+            setProxy(false);
+            return WWW_AUTH;
+        }
+        if (httpStatus == 407) {
+            setProxy(true);
+            return PROXY_AUTH;
+        }
+        return "";
+    }
+
+    private String findDigestHeader(Headers headers, String name) {
+        final List<String> authHeaders = headers.values(name);
         for (String header : authHeaders) {
             if (header.startsWith("Digest")) {
                 return header;

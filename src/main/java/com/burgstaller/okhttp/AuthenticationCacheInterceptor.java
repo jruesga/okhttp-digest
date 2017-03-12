@@ -5,6 +5,7 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator;
 import java.io.IOException;
 import java.util.Map;
 
+import okhttp3.Connection;
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
 import okhttp3.Request;
@@ -34,7 +35,8 @@ public class AuthenticationCacheInterceptor implements Interceptor {
         CachingAuthenticator authenticator = authCache.get(key);
         Request authRequest = null;
         if (authenticator != null) {
-            Route route = chain.connection() == null ? null : chain.connection().route();
+            final Connection connection = chain.connection();
+            Route route = connection == null ? null : connection.route();
             authRequest = authenticator.authenticateWithState(route, request);
         }
         if (authRequest == null) {

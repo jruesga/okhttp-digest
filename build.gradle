@@ -3,7 +3,7 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.2.3'
+        classpath 'com.android.tools.build:gradle:2.3.3'
     }
 }
 
@@ -15,14 +15,12 @@ repositories {
 }
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion '25.0.2'
+    compileSdkVersion 26
+    buildToolsVersion '26.0.0'
 
     defaultConfig {
         minSdkVersion 9
-        targetSdkVersion 25
-        versionCode 1
-        versionName "${project.version}"
+        targetSdkVersion 26
     }
     lintOptions {
         disable 'InvalidPackage', 'TrulyRandom'
@@ -39,10 +37,10 @@ android {
 }
 
 dependencies {
-    compile 'com.squareup.okhttp3:okhttp:3.5.0'
-    compile "com.squareup.okhttp3:logging-interceptor:3.5.0"
+    compile 'com.squareup.okhttp3:okhttp:3.8.0'
+    compile "com.squareup.okhttp3:logging-interceptor:3.8.0"
 
     testCompile 'org.hamcrest:hamcrest-junit:2.0.0.0'
     testCompile 'junit:junit:4.12'
-    testCompile 'org.mockito:mockito-core:2.6.9'
+    testCompile 'org.mockito:mockito-core:2.8.47'
 }

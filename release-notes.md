@@ -1,3 +1,21 @@
+## v1.14
+
+* improved multithreaded access
+* upgraded okhttp dependency to 3.8.1
+
+## v1.13
+
+* converted to pure java library 
+* upgraded okhttp dependency to 3.7.0
+
+## v1.12
+
+* fixed issues with new proxy code when no proxy was used
+
+## v1.11 (bad release dont use)
+
+* improved proxy authentication (not tested if it actually works)
+
 ## v1.10
 
 * upgrade to okhttp 3.5

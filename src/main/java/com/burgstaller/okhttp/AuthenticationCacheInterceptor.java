@@ -34,9 +34,9 @@ public class AuthenticationCacheInterceptor implements Interceptor {
         final String key = CachingUtils.getCachingKey(url);
         CachingAuthenticator authenticator = authCache.get(key);
         Request authRequest = null;
+        Connection connection = chain.connection();
+        Route route = connection != null ? connection.route() : null;
         if (authenticator != null) {
-            final Connection connection = chain.connection();
-            Route route = connection == null ? null : connection.route();
             authRequest = authenticator.authenticateWithState(route, request);
         }
         if (authRequest == null) {

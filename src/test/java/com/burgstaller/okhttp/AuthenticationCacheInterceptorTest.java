@@ -140,6 +140,26 @@ public class AuthenticationCacheInterceptorTest {
         thenNoAuthorizationHeaderShouldBePresent(authorization2);
     }
 
+    @Test
+    public void testCaching__whenNoConnectionExists__shouldNotBombOut() throws IOException {
+        Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
+        Interceptor interceptor = new AuthenticationCacheInterceptor(authCache);
+
+        String auth = whenInterceptAuthenticationForUrlWithNoConnection(interceptor, "https://myhost.com:443");
+        assertNull(auth);
+    }
+
+    @Test
+    public void testCaching__whenNoConnectionExistsButCachedInfo__shouldNotBombOut() throws IOException {
+        Map<String, CachingAuthenticator> authCache = new ConcurrentHashMap<>();
+        givenCachedAuthenticationFor("https://myhost.com:443", authCache);
+        Interceptor interceptor = new AuthenticationCacheInterceptor(authCache);
+
+        // when
+        String auth = whenInterceptAuthenticationForUrlWithNoConnection(interceptor, "https://myhost.com:443");
+        thenAuthorizationHeaderShouldBePresent(auth);
+    }
+
     private void thenNoAuthorizationHeaderShouldBePresent(String authorization2) {
         assertNull(authorization2);
     }
@@ -175,6 +195,33 @@ public class AuthenticationCacheInterceptorTest {
         return authResultHeader.get();
     }
 
+    private String whenInterceptAuthenticationForUrlWithNoConnection(Interceptor interceptor, final String url) throws IOException {
+        // we need a result holder for passing into the anonymous class
+        final AtomicReference<String> authResultHeader = new AtomicReference<>();
+        interceptor.intercept(new Interceptor.Chain() {
+            @Override
+            public Request request() {
+                return new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
+            }
+
+            @Override
+            public Response proceed(Request request) throws IOException {
+                final String authorization = request.header("Authorization");
+                authResultHeader.set(authorization);
+                return null;
+            }
+
+            @Override
+            public Connection connection() {
+                return null;
+            }
+        });
+        return authResultHeader.get();
+    }
+
     private void givenCachedAuthenticationFor(String url, Map<String, CachingAuthenticator> authCache) throws IOException {
         Authenticator decorator = new CachingAuthenticatorDecorator(
                 new BasicAuthenticator(new Credentials("user1", "user1")),
@@ -187,6 +234,7 @@ public class AuthenticationCacheInterceptorTest {
                 .request(dummyRequest)
                 .protocol(Protocol.HTTP_1_1)
                 .code(HTTP_UNAUTHORIZED)
+                .message("Unauthorized")
                 .header("WWW-Authenticate", "Basic realm=\"myrealm\"")
                 .build();
         decorator.authenticate(null, response);
@@ -198,6 +246,7 @@ public class AuthenticationCacheInterceptorTest {
                 .request(request)
                 .protocol(Protocol.HTTP_1_1)
                 .code(HTTP_UNAUTHORIZED)
+                .message("Unauthorized")
                 .header("WWW-Authenticate", "Basic realm=\"myrealm\"")
                 .build();
     }

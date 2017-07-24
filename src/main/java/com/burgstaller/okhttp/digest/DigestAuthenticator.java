@@ -1,3 +1,22 @@
+/*
+ * This file incorporates work covered by the following copyright and
+ * permission notice:
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package com.burgstaller.okhttp.digest;
 
@@ -17,7 +36,9 @@ import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Formatter;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +46,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import okhttp3.Headers;
 import okhttp3.Request;
@@ -61,7 +83,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
             'e', 'f'
     };
 
-    Map<String, String> parameters = new ConcurrentHashMap<>();
+    private AtomicReference<Map<String,String>> parametersRef = new AtomicReference<>();
     private Charset credentialsCharset = Charset.forName("ASCII");
     private final Credentials credentials;
     private String lastNonce;
@@ -139,16 +161,19 @@ public class DigestAuthenticator implements CachingAuthenticator {
     @Override
     public synchronized Request authenticate(Route route, Response response) throws IOException {
         String header = findDigestHeader(response.headers(), getHeaderName(response.code()));
+        Map<String,String> parameters = new HashMap<>();
         parseChallenge(header, 7, header.length() - 7, parameters);
         // first copy all request headers to our params array
         copyHeaderMap(response.headers(), parameters);
+        // save these parameters so future requests don't need the challenge response every time
+        parametersRef.set(Collections.unmodifiableMap(parameters));
 
         // sanity check for issue #22
         if (parameters.get("nonce") == null) {
             throw new IllegalArgumentException("missing nonce in challenge header: " + header);
         }
 
-        return authenticateWithState(route, response.request());
+        return authenticateWithState(route, response.request(), parameters);
     }
 
     private String getHeaderName(int httpStatus) {
@@ -175,13 +200,19 @@ public class DigestAuthenticator implements CachingAuthenticator {
 
     @Override
     public Request authenticateWithState(Route route, Request request) throws IOException {
+        // make sure we don't modify the values in shared parametersRef instance
+        Map<String,String> parameters = new HashMap<>(parametersRef.get());
+        return authenticateWithState(route, request, parameters);
+    }
+
+    private Request authenticateWithState(Route route, Request request, Map<String,String> parameters) throws IOException {
         final String realm = parameters.get("realm");
         if (realm == null) {
             // missing realm, this would mean that the authenticator is not initialized for this
             // request. (e.g. if you configured the DispatchingAuthenticator.
             return null;
         }
-        final String nonce = getParameter("nonce");
+        final String nonce = parameters.get("nonce");
         if (nonce == null) {
             throw new IllegalArgumentException("missing nonce in challenge");
         }
@@ -198,21 +229,21 @@ public class DigestAuthenticator implements CachingAuthenticator {
         if (route == null || !route.requiresTunnel()) {
             final String method = request.method();
             final String uri = RequestLine.requestPath(request.url());
-            getParameters().put("methodname", method);
-            getParameters().put("uri", uri);
+            parameters.put("methodname", method);
+            parameters.put("uri", uri);
         } else {
             final String method = "CONNECT";
             final String uri = request.url().host() + ':' + request.url().port();
-            getParameters().put("methodname", method);
-            getParameters().put("uri", uri);
+            parameters.put("methodname", method);
+            parameters.put("uri", uri);
         }
 
-        final String charset = getParameter("charset");
+        final String charset = parameters.get("charset");
         if (charset == null) {
             String credentialsCharset = getCredentialsCharset(request);
-            getParameters().put("charset", credentialsCharset);
+            parameters.put("charset", credentialsCharset);
         }
-        final NameValuePair digestHeader = createDigestHeader(credentials, request);
+        final NameValuePair digestHeader = createDigestHeader(credentials, request, parameters);
         return request.newBuilder()
                 .header(digestHeader.getName(), digestHeader.getValue())
                 .build();
@@ -245,10 +276,6 @@ public class DigestAuthenticator implements CachingAuthenticator {
         }
     }
 
-    private String getParameter(String key) {
-        return parameters.get(key);
-    }
-
     /**
      * Creates digest-response header as defined in RFC2617.
      *
@@ -258,13 +285,14 @@ public class DigestAuthenticator implements CachingAuthenticator {
 //    @edu.umd.cs.findbugs.annotations.SuppressFBWarnings("LSC_LITERAL_STRING_COMPARISON")
     private synchronized NameValuePair createDigestHeader(
             final Credentials credentials,
-            final Request request) throws AuthenticationException {
-        final String uri = getParameter("uri");
-        final String realm = getParameter("realm");
-        final String nonce = getParameter("nonce");
-        final String opaque = getParameter("opaque");
-        final String method = getParameter("methodname");
-        String algorithm = getParameter("algorithm");
+            final Request request,
+            final Map<String,String> parameters) throws AuthenticationException {
+        final String uri = parameters.get("uri");
+        final String realm = parameters.get("realm");
+        final String nonce = parameters.get("nonce");
+        final String opaque = parameters.get("opaque");
+        final String method = parameters.get("methodname");
+        String algorithm = parameters.get("algorithm");
         // If an algorithm is not specified, default to MD5.
         if (algorithm == null) {
             algorithm = "MD5";
@@ -272,7 +300,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
 
         final Set<String> qopset = new HashSet<>(8);
         int qop = QOP_UNKNOWN;
-        final String qoplist = getParameter("qop");
+        final String qoplist = parameters.get("qop");
         if (qoplist != null) {
             final StringTokenizer tok = new StringTokenizer(qoplist, ",");
             while (tok.hasMoreTokens()) {
@@ -292,7 +320,7 @@ public class DigestAuthenticator implements CachingAuthenticator {
             throw new AuthenticationException("None of the qop methods is supported: " + qoplist);
         }
 
-        String charset = getParameter("charset");
+        String charset = parameters.get("charset");
         if (charset == null) {
             charset = "ISO-8859-1";
         }
@@ -441,11 +469,6 @@ public class DigestAuthenticator implements CachingAuthenticator {
             BasicHeaderValueFormatter.DEFAULT.formatNameValuePair(buffer, param, !noQuotes);
         }
         return new BasicNameValuePair(headerKey, buffer.toString());
-    }
-
-
-    public Map<String, String> getParameters() {
-        return parameters;
     }
 
 

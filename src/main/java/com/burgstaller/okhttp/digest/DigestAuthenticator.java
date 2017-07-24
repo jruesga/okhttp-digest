@@ -201,7 +201,8 @@ public class DigestAuthenticator implements CachingAuthenticator {
     @Override
     public Request authenticateWithState(Route route, Request request) throws IOException {
         // make sure we don't modify the values in shared parametersRef instance
-        Map<String,String> parameters = new HashMap<>(parametersRef.get());
+        Map<String,String> ref = parametersRef.get();
+        Map<String,String> parameters = ref == null ? new HashMap<>() : new HashMap<>(ref);
         return authenticateWithState(route, request, parameters);
     }
 

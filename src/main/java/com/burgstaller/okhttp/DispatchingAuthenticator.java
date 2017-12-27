@@ -20,8 +20,10 @@ import okhttp3.Route;
 public class DispatchingAuthenticator implements CachingAuthenticator {
     private final Map<String, Authenticator> authenticatorRegistry;
     private final Map<String, CachingAuthenticator> cachingRegistry;
+    private final boolean requireAuthScheme;
 
-    private DispatchingAuthenticator(Map<String, Authenticator> registry) {
+    private DispatchingAuthenticator(Map<String, Authenticator> registry, boolean requireAuthScheme) {
+        this.requireAuthScheme = requireAuthScheme;
         authenticatorRegistry = registry;
         cachingRegistry = new LinkedHashMap<>();
         for (Map.Entry<String, Authenticator> entry : authenticatorRegistry.entrySet()) {
@@ -46,7 +48,10 @@ public class DispatchingAuthenticator implements CachingAuthenticator {
                 }
             }
         }
-        throw new IllegalArgumentException("unsupported auth scheme " + challenges);
+        if (requireAuthScheme) {
+            throw new IllegalArgumentException("unsupported auth scheme " + challenges);
+        }
+        return null;
     }
 
     @Override
@@ -61,15 +66,21 @@ public class DispatchingAuthenticator implements CachingAuthenticator {
     }
 
     public static final class Builder {
-        Map<String, Authenticator> registry = new LinkedHashMap<>();
+        private final Map<String, Authenticator> registry = new LinkedHashMap<>();
+        private boolean requireAuthScheme = true;
 
         public Builder with(String scheme, Authenticator authenticator) {
             registry.put(scheme.toLowerCase(Locale.getDefault()), authenticator);
             return this;
         }
 
+        public Builder requireAuthScheme(boolean requireAuthScheme) {
+            this.requireAuthScheme = requireAuthScheme;
+            return this;
+        }
+
         public DispatchingAuthenticator build() {
-            return new DispatchingAuthenticator(registry);
+            return new DispatchingAuthenticator(registry, requireAuthScheme);
         }
     }
 }
